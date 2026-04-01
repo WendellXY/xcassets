@@ -486,13 +486,18 @@ fn parses_real_project_catalogs_when_requested() {
         Ok(path) => PathBuf::from(path),
         Err(_) => return,
     };
+    let limit = std::env::var("XCASSETS_REAL_PROJECT_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(10);
 
     let mut catalogs = Vec::new();
     collect_catalogs(&project_root, &mut catalogs);
+    catalogs.sort();
     assert!(!catalogs.is_empty(), "no .xcassets catalogs found");
 
     let mut fatal_failures = Vec::new();
-    for catalog in catalogs {
+    for catalog in catalogs.into_iter().take(limit) {
         if let Err(error) = parse_catalog(&catalog) {
             fatal_failures.push((catalog, error));
         }

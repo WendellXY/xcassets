@@ -6,6 +6,8 @@ It reads a single `.xcassets` directory into a typed tree, keeps unsupported
 folder types visible as opaque nodes, and reports non-fatal problems as
 diagnostics instead of stopping at the first issue.
 
+Repository: <https://github.com/WendellXY/xcassets>
+
 ## What It Supports Today
 
 The current parser has first-class support for:
@@ -25,7 +27,7 @@ Add the crate to your project:
 
 ```toml
 [dependencies]
-xcassets = { path = "/path/to/xcassets" }
+xcassets = { git = "https://github.com/WendellXY/xcassets.git" }
 ```
 
 ## Example
@@ -126,8 +128,15 @@ You can also run the ignored smoke test against a real iOS project:
 
 ```bash
 XCASSETS_REAL_PROJECT=/path/to/ios/project \
+XCASSETS_REAL_PROJECT_LIMIT=25 \
   cargo test --test parser parses_real_project_catalogs_when_requested -- --ignored --nocapture
 ```
 
-This test walks the project tree, finds `.xcassets` catalogs, and verifies they
-can all be parsed without fatal failures.
+This test walks the project tree, finds `.xcassets` catalogs, and verifies a
+bounded set of them can be parsed without fatal failures. It defaults to 10
+catalogs so it stays fast enough for normal development, and you can raise the
+limit when you want a broader smoke pass.
+
+## License
+
+MIT
