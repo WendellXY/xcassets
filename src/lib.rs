@@ -1,14 +1,14 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+mod diagnostics;
+mod error;
+mod model;
+mod parser;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use diagnostics::{Diagnostic, DiagnosticCode, Severity};
+pub use error::ParseError;
+pub use model::{
+    AppIconSetContents, AppIconSetNode, Appearance, AssetCatalog, ColorEntry, ColorSetContents,
+    ColorSetNode, ColorValue, ContentsInfo, FolderContents, FolderNode, FolderProperties,
+    GroupNode, ImageEntry, ImageSetContents, ImageSetNode, JsonMap, Node, OpaqueNode, ParseReport,
+    RawContents,
+};
+pub use parser::parse_catalog;

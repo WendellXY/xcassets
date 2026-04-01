@@ -1,0 +1,29 @@
+{
+  "images": [
+    {
+      "filename": "banner-ltr-1x.png",
+      "idiom": "universal",
+      "language-direction": "left-to-right",
+      "scale": "1x"
+    },
+    {
+      "filename": "banner-rtl-1x.png",
+      "idiom": "universal",
+      "language-direction": "right-to-left",
+      "scale": "1x"
+    },
+    {
+      "filename": "banner-ltr-2x.png",
+      "idiom": "universal",
+      "language-direction": "left-to-right",
+      "scale": "2x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  },
+  "properties": {
+    "localizable": true
+  }
+}
