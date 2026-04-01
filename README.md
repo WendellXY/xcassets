@@ -25,9 +25,8 @@ inspect the catalog tree without losing information.
 
 Add the crate to your project:
 
-```toml
-[dependencies]
-xcassets = { git = "https://github.com/WendellXY/xcassets.git" }
+```bash
+cargo add xcassets
 ```
 
 ## Example
