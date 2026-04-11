@@ -5,6 +5,7 @@ use std::{
 
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use serde_json::error::Category;
 
 use crate::{
     diagnostics::{Diagnostic, DiagnosticCode, Severity},
@@ -66,8 +67,9 @@ enum FolderKind {
 }
 
 #[derive(Debug)]
-enum LoadedContents {
-    Json(Value),
+enum TypedContents<T> {
+    Parsed(T),
+    InvalidSchema(Value),
     InvalidJson(String),
 }
 
@@ -323,8 +325,8 @@ impl Parser {
     where
         T: DeserializeOwned,
     {
-        match contents_path.and_then(|path| self.load_contents(path, relative_path)) {
-            Some(loaded) => self.parse_loaded_contents(loaded, relative_path),
+        match contents_path.and_then(|path| self.load_typed_contents(path, relative_path)) {
+            Some(loaded) => self.unpack_typed_contents(loaded),
             None => (None, None),
         }
     }
@@ -337,8 +339,8 @@ impl Parser {
     where
         T: DeserializeOwned,
     {
-        match contents_path.and_then(|path| self.load_contents(path, relative_path)) {
-            Some(loaded) => self.parse_loaded_contents(loaded, relative_path),
+        match contents_path.and_then(|path| self.load_typed_contents(path, relative_path)) {
+            Some(loaded) => self.unpack_typed_contents(loaded),
             None => {
                 self.push_diagnostic(
                     DiagnosticCode::MissingContentsJson,
@@ -351,28 +353,14 @@ impl Parser {
         }
     }
 
-    fn parse_loaded_contents<T>(
-        &mut self,
-        loaded: LoadedContents,
-        relative_path: &Path,
-    ) -> (Option<T>, Option<RawContents>)
+    fn unpack_typed_contents<T>(&self, loaded: TypedContents<T>) -> (Option<T>, Option<RawContents>)
     where
         T: DeserializeOwned,
     {
         match loaded {
-            LoadedContents::Json(value) => match serde_json::from_value::<T>(value.clone()) {
-                Ok(contents) => (Some(contents), None),
-                Err(error) => {
-                    self.push_diagnostic(
-                        DiagnosticCode::InvalidContentsSchema,
-                        Severity::Error,
-                        relative_path.to_path_buf(),
-                        format!("unsupported or malformed Contents.json schema: {error}"),
-                    );
-                    (None, Some(RawContents::Json(value)))
-                }
-            },
-            LoadedContents::InvalidJson(text) => (None, Some(RawContents::InvalidJson(text))),
+            TypedContents::Parsed(contents) => (Some(contents), None),
+            TypedContents::InvalidSchema(value) => (None, Some(RawContents::Json(value))),
+            TypedContents::InvalidJson(text) => (None, Some(RawContents::InvalidJson(text))),
         }
     }
 
@@ -381,33 +369,9 @@ impl Parser {
         contents_path: Option<&Path>,
         relative_path: &Path,
     ) -> Option<RawContents> {
-        let loaded = contents_path.and_then(|path| self.load_contents(path, relative_path))?;
-        Some(match loaded {
-            LoadedContents::Json(value) => RawContents::Json(value),
-            LoadedContents::InvalidJson(text) => RawContents::InvalidJson(text),
-        })
-    }
-
-    fn load_contents(
-        &mut self,
-        contents_path: &Path,
-        relative_path: &Path,
-    ) -> Option<LoadedContents> {
-        let raw_text = match fs::read_to_string(contents_path) {
-            Ok(raw_text) => raw_text,
-            Err(error) => {
-                self.push_diagnostic(
-                    DiagnosticCode::UnreadableFile,
-                    Severity::Error,
-                    relative_path.to_path_buf(),
-                    format!("failed to read Contents.json: {error}"),
-                );
-                return None;
-            }
-        };
-
+        let raw_text = self.read_contents_text(contents_path?, relative_path)?;
         match serde_json::from_str::<Value>(&raw_text) {
-            Ok(value) => Some(LoadedContents::Json(value)),
+            Ok(value) => Some(RawContents::Json(value)),
             Err(error) => {
                 self.push_diagnostic(
                     DiagnosticCode::InvalidContentsJson,
@@ -415,7 +379,68 @@ impl Parser {
                     relative_path.to_path_buf(),
                     format!("invalid Contents.json: {error}"),
                 );
-                Some(LoadedContents::InvalidJson(raw_text))
+                Some(RawContents::InvalidJson(raw_text))
+            }
+        }
+    }
+
+    fn load_typed_contents<T>(
+        &mut self,
+        contents_path: &Path,
+        relative_path: &Path,
+    ) -> Option<TypedContents<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let raw_text = self.read_contents_text(contents_path, relative_path)?;
+
+        match serde_json::from_str::<T>(&raw_text) {
+            Ok(contents) => Some(TypedContents::Parsed(contents)),
+            Err(error) => match error.classify() {
+                Category::Data => match serde_json::from_str::<Value>(&raw_text) {
+                    Ok(value) => {
+                        self.push_diagnostic(
+                            DiagnosticCode::InvalidContentsSchema,
+                            Severity::Error,
+                            relative_path.to_path_buf(),
+                            format!("unsupported or malformed Contents.json schema: {error}"),
+                        );
+                        Some(TypedContents::InvalidSchema(value))
+                    }
+                    Err(value_error) => {
+                        self.push_diagnostic(
+                            DiagnosticCode::InvalidContentsJson,
+                            Severity::Error,
+                            relative_path.to_path_buf(),
+                            format!("invalid Contents.json: {value_error}"),
+                        );
+                        Some(TypedContents::InvalidJson(raw_text))
+                    }
+                },
+                Category::Syntax | Category::Eof | Category::Io => {
+                    self.push_diagnostic(
+                        DiagnosticCode::InvalidContentsJson,
+                        Severity::Error,
+                        relative_path.to_path_buf(),
+                        format!("invalid Contents.json: {error}"),
+                    );
+                    Some(TypedContents::InvalidJson(raw_text))
+                }
+            },
+        }
+    }
+
+    fn read_contents_text(&mut self, contents_path: &Path, relative_path: &Path) -> Option<String> {
+        match fs::read_to_string(contents_path) {
+            Ok(raw_text) => Some(raw_text),
+            Err(error) => {
+                self.push_diagnostic(
+                    DiagnosticCode::UnreadableFile,
+                    Severity::Error,
+                    relative_path.to_path_buf(),
+                    format!("failed to read Contents.json: {error}"),
+                );
+                None
             }
         }
     }
@@ -432,7 +457,7 @@ impl Parser {
             };
 
             let file_path = join_relative(relative_path, filename);
-            if !files.iter().any(|candidate| candidate == &file_path) {
+            if files.binary_search(&file_path).is_err() {
                 self.push_diagnostic(
                     DiagnosticCode::MissingReferencedFile,
                     Severity::Error,
