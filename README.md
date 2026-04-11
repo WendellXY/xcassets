@@ -1,14 +1,39 @@
 # xcassets
 
-`xcassets` is a Rust library for parsing Xcode asset catalogs.
+`xcassets` is a Rust library for reading Xcode asset catalogs.
 
-It reads a single `.xcassets` directory into a typed tree, keeps unsupported
-folder types visible as opaque nodes, and reports non-fatal problems as
-diagnostics instead of stopping at the first issue.
+It is aimed at tooling authors who need one of these two jobs:
 
-Repository: <https://github.com/WendellXY/xcassets>
+- parse a catalog into a typed tree
+- index runtime asset lookup names without paying for full parsing
 
-## What It Supports Today
+The crate reads a single `.xcassets` directory, keeps unsupported folder types
+visible as opaque nodes, and reports non-fatal problems as diagnostics instead
+of stopping at the first issue.
+
+Repository: <https://github.com/oops-rs/xcassets>
+
+## Choose An API
+
+Use `parse_catalog(...)` when you need the actual catalog structure and
+`Contents.json` data:
+
+- groups
+- image sets
+- color sets
+- app icon sets
+- raw JSON preservation on malformed or unsupported nodes
+- diagnostics such as missing files or invalid `Contents.json`
+
+Use `index_asset_references(...)` when you only need runtime lookup names such
+as `icon`, `Navigator/icon_back`, or `Game/coin`:
+
+- much lighter-weight than full parsing
+- does not parse leaf image-set or color-set rendition configs
+- only reads folder `Contents.json` when needed for namespace resolution
+- returned order is not guaranteed
+
+## What It Supports
 
 The current parser has first-class support for:
 
@@ -35,7 +60,9 @@ Enable the optional parallel parser when you want multi-threaded subtree walks:
 cargo add xcassets --features parallel
 ```
 
-## Example
+## Quick Start
+
+### Full Parse
 
 ```rust
 use xcassets::{parse_catalog, Node, Severity};
@@ -77,9 +104,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## API Overview
+### Runtime Reference Index
 
-The main entry point is:
+```rust
+use xcassets::{AssetReferenceKind, index_asset_references};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let index = index_asset_references("Assets.xcassets")?;
+
+    for reference in &index.references {
+        match reference.kind {
+            AssetReferenceKind::Image => {
+                println!("image lookup: {}", reference.lookup_name);
+            }
+            AssetReferenceKind::Color => {
+                println!("color lookup: {}", reference.lookup_name);
+            }
+            AssetReferenceKind::AppIcon => {
+                println!("app icon set: {}", reference.lookup_name);
+            }
+        }
+    }
+
+    Ok(())
+}
+```
+
+## API Reference
+
+### `parse_catalog`
 
 ```rust
 pub fn parse_catalog(
@@ -87,8 +140,19 @@ pub fn parse_catalog(
 ) -> Result<xcassets::ParseReport, xcassets::ParseError>
 ```
 
-With the `parallel` feature enabled, you can also opt into sibling-directory
-parsing across the Rayon thread pool:
+Returns a `ParseReport`:
+
+- `catalog`: the parsed `AssetCatalog`
+- `diagnostics`: non-fatal issues found while parsing
+
+`ParseError` is reserved for failures that prevent producing a report at all,
+such as passing a non-directory path or a path that is not a `.xcassets`
+catalog root.
+
+### `parse_catalog_parallel`
+
+With the `parallel` feature enabled, you can opt into sibling-directory parsing
+across the Rayon thread pool:
 
 ```rust
 #[cfg(feature = "parallel")]
@@ -97,16 +161,13 @@ pub fn parse_catalog_parallel(
 ) -> Result<xcassets::ParseReport, xcassets::ParseError>
 ```
 
-`ParseReport` contains:
-
-- `catalog`: the parsed `AssetCatalog`
-- `diagnostics`: non-fatal issues found while parsing
-
 The parallel entry point preserves the same child ordering and diagnostic
 ordering as the sequential parser so callers can compare results directly.
 
-For callers that only need runtime lookup names such as `icon`, `Colors/brand`,
-or `Game/coin`, there is also a lightweight indexer:
+### `index_asset_references`
+
+For callers that only need runtime lookup names, there is also a lightweight
+indexer:
 
 ```rust
 pub fn index_asset_references(
@@ -114,20 +175,24 @@ pub fn index_asset_references(
 ) -> Result<xcassets::AssetReferenceIndex, xcassets::ParseError>
 ```
 
-This API reads the catalog tree and only consults folder `Contents.json` files
+Returns an `AssetReferenceIndex`:
+
+- `catalog_name`: the catalog stem
+- `source_path`: the `.xcassets` root
+- `references`: discovered runtime asset names
+- `diagnostics`: non-fatal issues found while resolving namespace metadata
+
+This API walks the catalog tree and only consults folder `Contents.json` files
 when needed to resolve namespace-providing groups or sprite atlases. It does
-not parse leaf image-set or color-set rendition configs.
+not parse leaf image-set or color-set rendition configs, which makes it a good
+fit for code generation, lookup validation, and resource indexing.
 
 The returned reference order is not guaranteed. Callers that need a stable
 order should sort the references themselves.
 
-`ParseError` is reserved for failures that prevent producing a report at all,
-such as passing a non-directory path or a path that is not a `.xcassets`
-catalog root.
-
 ## Diagnostics
 
-The parser currently emits diagnostics for cases like:
+The crate emits diagnostics for cases like:
 
 - missing required `Contents.json`
 - invalid `Contents.json`
@@ -138,7 +203,7 @@ The parser currently emits diagnostics for cases like:
 This makes the crate useful for tooling, validation, and migration workflows
 where partial results are still valuable.
 
-## Format Notes
+## Behavior Notes
 
 The parser is intentionally lenient:
 
@@ -149,6 +214,9 @@ The parser is intentionally lenient:
 
 This matches real-world Xcode projects more closely than a strict schema-only
 approach.
+
+Namespace-aware asset references follow the asset catalog rules for
+`provides-namespace` on groups and sprite atlases.
 
 ## Development
 
