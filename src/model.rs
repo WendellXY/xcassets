@@ -13,6 +13,28 @@ pub struct ParseReport {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetReferenceIndex {
+    pub catalog_name: String,
+    pub source_path: PathBuf,
+    pub references: Vec<AssetReference>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetReference {
+    pub kind: AssetReferenceKind,
+    pub lookup_name: String,
+    pub relative_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssetReferenceKind {
+    Image,
+    Color,
+    AppIcon,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AssetCatalog {
     pub name: String,

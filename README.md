@@ -105,6 +105,22 @@ pub fn parse_catalog_parallel(
 The parallel entry point preserves the same child ordering and diagnostic
 ordering as the sequential parser so callers can compare results directly.
 
+For callers that only need runtime lookup names such as `icon`, `Colors/brand`,
+or `Game/coin`, there is also a lightweight indexer:
+
+```rust
+pub fn index_asset_references(
+    path: impl AsRef<std::path::Path>,
+) -> Result<xcassets::AssetReferenceIndex, xcassets::ParseError>
+```
+
+This API reads the catalog tree and only consults folder `Contents.json` files
+when needed to resolve namespace-providing groups or sprite atlases. It does
+not parse leaf image-set or color-set rendition configs.
+
+The returned reference order is not guaranteed. Callers that need a stable
+order should sort the references themselves.
+
 `ParseError` is reserved for failures that prevent producing a report at all,
 such as passing a non-directory path or a path that is not a `.xcassets`
 catalog root.
