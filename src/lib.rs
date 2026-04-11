@@ -12,3 +12,5 @@ pub use model::{
     RawContents,
 };
 pub use parser::parse_catalog;
+#[cfg(feature = "parallel")]
+pub use parser::parse_catalog_parallel;

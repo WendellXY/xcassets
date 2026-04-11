@@ -29,6 +29,12 @@ Add the crate to your project:
 cargo add xcassets
 ```
 
+Enable the optional parallel parser when you want multi-threaded subtree walks:
+
+```bash
+cargo add xcassets --features parallel
+```
+
 ## Example
 
 ```rust
@@ -81,10 +87,23 @@ pub fn parse_catalog(
 ) -> Result<xcassets::ParseReport, xcassets::ParseError>
 ```
 
+With the `parallel` feature enabled, you can also opt into sibling-directory
+parsing across the Rayon thread pool:
+
+```rust
+#[cfg(feature = "parallel")]
+pub fn parse_catalog_parallel(
+    path: impl AsRef<std::path::Path>,
+) -> Result<xcassets::ParseReport, xcassets::ParseError>
+```
+
 `ParseReport` contains:
 
 - `catalog`: the parsed `AssetCatalog`
 - `diagnostics`: non-fatal issues found while parsing
+
+The parallel entry point preserves the same child ordering and diagnostic
+ordering as the sequential parser so callers can compare results directly.
 
 `ParseError` is reserved for failures that prevent producing a report at all,
 such as passing a non-directory path or a path that is not a `.xcassets`

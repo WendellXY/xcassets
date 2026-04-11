@@ -4,6 +4,8 @@ use std::{
 };
 
 use tempfile::tempdir;
+#[cfg(feature = "parallel")]
+use xcassets::parse_catalog_parallel;
 use xcassets::{DiagnosticCode, Node, ParseError, RawContents, Severity, parse_catalog};
 
 fn write_file(path: &Path, contents: &str) {
@@ -526,4 +528,16 @@ fn collect_catalogs(dir: &Path, catalogs: &mut Vec<PathBuf>) {
         }
         collect_catalogs(&path, catalogs);
     }
+}
+
+#[cfg(feature = "parallel")]
+#[test]
+fn parallel_parser_matches_sequential_report() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/production_like/Assets.xcassets");
+
+    let sequential = parse_catalog(&fixture).unwrap();
+    let parallel = parse_catalog_parallel(&fixture).unwrap();
+
+    assert_eq!(parallel, sequential);
 }
